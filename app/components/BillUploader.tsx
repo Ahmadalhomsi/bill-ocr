@@ -23,19 +23,33 @@ interface ExtractedData {
   }>;
   total_calculated: number | null;
   item_count: number;
+  merchant_info?: {
+    name?: string;
+    address?: string;
+    phone?: string;
+  };
+  bill_metadata?: {
+    bill_number?: string;
+    cashier?: string;
+    payment_method?: string;
+  };
 }
 
 interface ProcessingResult {
   raw_text: {
-    tesseract: string;
-    easyocr: string;
+    tesseract?: string;
+    easyocr?: string;
+    gpt4o_response?: string;
     combined: string;
   };
   extracted_data: ExtractedData;
   processing_info: {
     timestamp: string;
-    ocr_engines_used: string[];
-    preprocessing_applied: boolean;
+    ocr_engines_used?: string[];
+    method?: string;
+    model?: string;
+    tokens_used?: number;
+    preprocessing_applied?: boolean;
   };
 }
 
@@ -81,14 +95,14 @@ export default function BillUploader() {
     formData.append('file', uploadedFile);
 
     try {
-      const response = await fetch('http://localhost:8001/process-bill', {
+      const response = await fetch('/api/process-bill', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const data: APIResponse = await response.json();
@@ -98,7 +112,9 @@ export default function BillUploader() {
       
       if (err instanceof Error) {
         if (err.message.includes('NetworkError') || err.message.includes('Failed to fetch')) {
-          errorMessage = 'Cannot connect to the OCR service. Please make sure the backend server is running on port 8001.';
+          errorMessage = 'Cannot connect to the API. Please check your internet connection.';
+        } else if (err.message.includes('API key not configured')) {
+          errorMessage = 'OpenAI API key not configured. Please check your environment variables.';
         } else {
           errorMessage = err.message;
         }
@@ -122,7 +138,7 @@ export default function BillUploader() {
       {/* Upload Area */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
         <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
-          Upload Bill Image
+          Upload Bill Image (GPT-4o Analysis)
         </h2>
 
         {!uploadedFile ? (
@@ -191,10 +207,10 @@ export default function BillUploader() {
                 {isProcessing ? (
                   <div className="flex items-center justify-center space-x-2">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Processing...</span>
+                    <span>Analyzing with GPT-4o...</span>
                   </div>
                 ) : (
-                  'Process Bill'
+                  'Analyze with GPT-4o'
                 )}
               </button>
             </div>
@@ -246,6 +262,86 @@ export default function BillUploader() {
               </p>
             </div>
           </div>
+
+          {/* Merchant Information */}
+          {result.result.extracted_data.merchant_info && (
+            Object.keys(result.result.extracted_data.merchant_info).length > 0 ||
+            result.result.extracted_data.merchant_info.name ||
+            result.result.extracted_data.merchant_info.address ||
+            result.result.extracted_data.merchant_info.phone
+          ) && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
+                🏪 Merchant Information
+              </h2>
+              <div className="space-y-3">
+                {result.result.extracted_data.merchant_info.name && (
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium text-gray-600 dark:text-gray-400 w-20">Name:</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {result.result.extracted_data.merchant_info.name}
+                    </span>
+                  </div>
+                )}
+                {result.result.extracted_data.merchant_info.address && (
+                  <div className="flex items-start space-x-3">
+                    <span className="font-medium text-gray-600 dark:text-gray-400 w-20">Address:</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {result.result.extracted_data.merchant_info.address}
+                    </span>
+                  </div>
+                )}
+                {result.result.extracted_data.merchant_info.phone && (
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium text-gray-600 dark:text-gray-400 w-20">Phone:</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {result.result.extracted_data.merchant_info.phone}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Bill Metadata */}
+          {result.result.extracted_data.bill_metadata && (
+            Object.keys(result.result.extracted_data.bill_metadata).length > 0 ||
+            result.result.extracted_data.bill_metadata.bill_number ||
+            result.result.extracted_data.bill_metadata.cashier ||
+            result.result.extracted_data.bill_metadata.payment_method
+          ) && (
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-6">
+                📋 Bill Details
+              </h2>
+              <div className="space-y-3">
+                {result.result.extracted_data.bill_metadata.bill_number && (
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium text-gray-600 dark:text-gray-400 w-24">Bill #:</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {result.result.extracted_data.bill_metadata.bill_number}
+                    </span>
+                  </div>
+                )}
+                {result.result.extracted_data.bill_metadata.cashier && (
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium text-gray-600 dark:text-gray-400 w-24">Cashier:</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {result.result.extracted_data.bill_metadata.cashier}
+                    </span>
+                  </div>
+                )}
+                {result.result.extracted_data.bill_metadata.payment_method && (
+                  <div className="flex items-center space-x-3">
+                    <span className="font-medium text-gray-600 dark:text-gray-400 w-24">Payment:</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {result.result.extracted_data.bill_metadata.payment_method}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Extracted Data */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
@@ -328,16 +424,61 @@ export default function BillUploader() {
                 </div>
               )}
 
+              {/* Merchant Info */}
+              {result.result.extracted_data.merchant_info && (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                    🏢 Merchant Info
+                  </h3>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Name:</strong> {result.result.extracted_data.merchant_info.name || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Address:</strong> {result.result.extracted_data.merchant_info.address || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Phone:</strong> {result.result.extracted_data.merchant_info.phone || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Bill Metadata */}
+              {result.result.extracted_data.bill_metadata && (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
+                    ℹ️ Bill Metadata
+                  </h3>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Bill Number:</strong> {result.result.extracted_data.bill_metadata.bill_number || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Cashier:</strong> {result.result.extracted_data.bill_metadata.cashier || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      <strong>Payment Method:</strong> {result.result.extracted_data.bill_metadata.payment_method || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Raw Text */}
               <div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">
-                  📝 Raw OCR Text
+                  📝 {result.result.raw_text.gpt4o_response ? 'GPT-4o Analysis' : 'Raw OCR Text'}
                 </h3>
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                   <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                    {result.result.raw_text.combined}
+                    {result.result.raw_text.gpt4o_response || result.result.raw_text.combined}
                   </pre>
                 </div>
+                {result.result.processing_info?.method === 'gpt-4o-vision' && result.result.processing_info?.tokens_used && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Processed with {result.result.processing_info.model} using {result.result.processing_info.tokens_used} tokens
+                  </p>
+                )}
               </div>
             </div>
           </div>
